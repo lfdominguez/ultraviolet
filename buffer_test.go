@@ -725,6 +725,65 @@ func TestRenderLineWideCellTail(t *testing.T) {
 	}
 }
 
+func TestBufferLineAreaFullWidth(t *testing.T) {
+	newBuf := func() *Buffer {
+		b := NewBuffer(3, 6)
+		for y, s := range []string{"a", "b", "c", "d", "e", "f"} {
+			b.SetCell(0, y, &Cell{Content: s, Width: 1})
+		}
+		return b
+	}
+	check := func(t *testing.T, b *Buffer, want []string) {
+		t.Helper()
+		for y, w := range want {
+			if got := b.Lines[y].String(); got != w {
+				t.Errorf("line %d = %q, want %q", y, got, w)
+			}
+		}
+		// Every line must still own its cells: writing to one line must not
+		// show up in another.
+		for y := range b.Lines {
+			b.SetCell(2, y, &Cell{Content: string(rune('0' + y)), Width: 1})
+		}
+		for y := range b.Lines {
+			if c := b.CellAt(2, y); c.Content != string(rune('0'+y)) {
+				t.Errorf("line %d shares its cells with another line", y)
+			}
+		}
+	}
+	area := Rect(0, 1, 3, 4) // lines 1 through 4, full width
+
+	t.Run("InsertLineArea", func(t *testing.T) {
+		b := newBuf()
+		b.InsertLineArea(2, 2, nil, area)
+		check(t, b, []string{"a", "b", "", "", "c", "f"})
+	})
+
+	t.Run("DeleteLineArea", func(t *testing.T) {
+		b := newBuf()
+		b.DeleteLineArea(2, 2, nil, area)
+		check(t, b, []string{"a", "b", "e", "", "", "f"})
+	})
+}
+
+func BenchmarkBufferInsertLineArea(b *testing.B) {
+	buf := NewBuffer(200, 1000)
+	area := buf.Bounds()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		buf.InsertLineArea(0, 1, nil, area)
+	}
+}
+
+func BenchmarkBufferDeleteLineArea(b *testing.B) {
+	buf := NewBuffer(200, 1000)
+	area := buf.Bounds()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		buf.DeleteLineArea(0, 1, nil, area)
+	}
+}
+
 func BenchmarkBufferSetCell(b *testing.B) {
 	buf := NewBuffer(80, 24)
 	cell := &Cell{Content: "A", Width: 1}

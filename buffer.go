@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"image"
 	"io"
+	"slices"
 	"strings"
 
 	"github.com/charmbracelet/x/ansi"
@@ -471,11 +472,20 @@ func (b *Buffer) InsertLineArea(y, n int, c *Cell, area Rectangle) {
 		n = area.Max.Y - y
 	}
 
-	// Move existing lines down within the bounds
-	for i := area.Max.Y - 1; i >= y+n; i-- {
-		for x := area.Min.X; x < area.Max.X; x++ {
-			// We don't need to clone c here because we're just moving lines down.
-			b.Lines[i][x] = b.Lines[i-n][x]
+	if area.Min.X == 0 && area.Max.X >= b.Width() {
+		// Whole lines: rotate them instead of copying every cell. The lines
+		// pushed out are reused as the new blank ones.
+		rows := b.Lines[y:area.Max.Y]
+		out := slices.Clone(rows[len(rows)-n:])
+		copy(rows[n:], rows[:len(rows)-n])
+		copy(rows, out)
+	} else {
+		// Move existing lines down within the bounds
+		for i := area.Max.Y - 1; i >= y+n; i-- {
+			for x := area.Min.X; x < area.Max.X; x++ {
+				// We don't need to clone c here because we're just moving lines down.
+				b.Lines[i][x] = b.Lines[i-n][x]
+			}
 		}
 	}
 
@@ -502,12 +512,21 @@ func (b *Buffer) DeleteLineArea(y, n int, c *Cell, area Rectangle) {
 		n = area.Max.Y - y
 	}
 
-	// Shift cells up within the bounds
-	for dst := y; dst < area.Max.Y-n; dst++ {
-		src := dst + n
-		for x := area.Min.X; x < area.Max.X; x++ {
-			// We don't need to clone c here because we're just moving cells up.
-			b.Lines[dst][x] = b.Lines[src][x]
+	if area.Min.X == 0 && area.Max.X >= b.Width() {
+		// Whole lines: rotate them instead of copying every cell. The lines
+		// pushed out are reused as the new blank ones at the bottom.
+		rows := b.Lines[y:area.Max.Y]
+		out := slices.Clone(rows[:n])
+		copy(rows, rows[n:])
+		copy(rows[len(rows)-n:], out)
+	} else {
+		// Shift cells up within the bounds
+		for dst := y; dst < area.Max.Y-n; dst++ {
+			src := dst + n
+			for x := area.Min.X; x < area.Max.X; x++ {
+				// We don't need to clone c here because we're just moving cells up.
+				b.Lines[dst][x] = b.Lines[src][x]
+			}
 		}
 	}
 
